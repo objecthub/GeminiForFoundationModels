@@ -42,7 +42,7 @@ let plan = try await session.respond(to: "Plan two days in Lisbon.", generating:
 ## Installation
 
 ```swift
-.package(url: "https://github.com/objecthub/GeminiForFoundationModels.git", from: "0.1.0")
+.package(url: "https://github.com/objecthub/GeminiForFoundationModels.git", from: "0.1.1")
 ```
 
 Then add the `GeminiForFoundationModels` product to your target.

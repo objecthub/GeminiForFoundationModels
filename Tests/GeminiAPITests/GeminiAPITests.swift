@@ -272,3 +272,16 @@ import Testing
     #expect(events == 1)
   }
 }
+
+@Suite struct URLSessionTransportTests {
+  @available(iOS 27.0, macOS 27.0, visionOS 27.0, watchOS 27.0, *)
+  @Test func `transports with the same timeout share their session`() {
+    let a = URLSessionTransport.shared(timeout: 41.5)
+    let b = URLSessionTransport.shared(timeout: 41.5)
+    let c = URLSessionTransport.shared(timeout: 42.5)
+    #expect(a.session === b.session)
+    #expect(a.session !== c.session)
+    #expect(a.session.configuration.timeoutIntervalForRequest == 41.5)
+    #expect(c.session.configuration.timeoutIntervalForRequest == 42.5)
+  }
+}

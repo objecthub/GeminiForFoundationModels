@@ -61,11 +61,10 @@ public struct GeminiExecutor: LanguageModelExecutor {
     self.transport = transport
   }
 
-  /// A transport honoring the configured request timeout.
+  /// A transport honoring the configured request timeout, on the session
+  /// shared by all requests with that timeout.
   static func makeTransport(timeout: TimeInterval) -> URLSessionTransport {
-    let sessionConfig = URLSessionConfiguration.default
-    sessionConfig.timeoutIntervalForRequest = timeout
-    return URLSessionTransport(session: URLSession(configuration: sessionConfig))
+    URLSessionTransport.shared(timeout: timeout)
   }
 
   public func respond(

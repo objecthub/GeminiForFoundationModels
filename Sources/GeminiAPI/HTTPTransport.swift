@@ -39,10 +39,29 @@ extension HTTPTransportError: LocalizedError {
 /// `URLSession`-backed transport used in production.
 @available(iOS 27.0, macOS 27.0, visionOS 27.0, watchOS 27.0, *)
 package struct URLSessionTransport: HTTPTransport {
-  private let session: URLSession
+  package let session: URLSession
 
   package init(session: URLSession = .shared) {
     self.session = session
+  }
+
+  /// The sessions shared by all transports with the same request timeout.
+  private static let sessions = Mutex<[TimeInterval: URLSession]>([:])
+
+  /// A transport on the session shared by all requests with request timeout
+  /// `timeout`. Sharing the session shares its pool of kept-alive
+  /// connections; a session per model or per call would leave its own idle
+  /// connections behind, and sessions are never invalidated.
+  package static func shared(timeout: TimeInterval) -> URLSessionTransport {
+    let session = sessions.withLock { sessions in
+      if let session = sessions[timeout] { return session }
+      let configuration = URLSessionConfiguration.default
+      configuration.timeoutIntervalForRequest = timeout
+      let session = URLSession(configuration: configuration)
+      sessions[timeout] = session
+      return session
+    }
+    return URLSessionTransport(session: session)
   }
 
   package func data(for request: URLRequest) async throws -> (Data, URLResponse) {

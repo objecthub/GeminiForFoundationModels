@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 (2026-11-21)
+
+- All requests with the same timeout share one `URLSession`. Before, every executor created its own session, and so did every model list call; the sessions were never invalidated, and each kept its own idle connections alive, which expire with log messages like `nw_read_request_report [C13] Receive failed with error "Operation timed out"`.
+
 ## 0.1.0 (2026-11-21)
 
 First release.
