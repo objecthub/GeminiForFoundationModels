@@ -1,0 +1,13 @@
+GeminiForFoundationModels
+Copyright 2026 Matthias Zenger
+
+This product includes software adapted from ClaudeForFoundationModels
+(https://github.com/anthropics/ClaudeForFoundationModels),
+Copyright 2026 Anthropic PBC, licensed under the Apache License, Version 2.0:
+
+- Sources/GeminiAPI/HTTPTransport.swift (transport and redirect policy)
+- Sources/GeminiAPI/SSEParser.swift (event-stream line splitting)
+
+The overall design (recording model turns in transcript entry metadata,
+the executor / request builder / event translator structure, and the test
+harness with a stubbed model) follows ClaudeForFoundationModels as well.
