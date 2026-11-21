@@ -13,6 +13,11 @@ import GeminiAPI
 /// Each `thought` step becomes a reasoning entry of its own. A turn can span
 /// several streams when the API asks for a continuation: feed each stream to
 /// the same translator.
+///
+/// A structured response is one JSON document, but a model using built-in
+/// tools can produce several `model_output` steps, some of them empty
+/// objects. For a structured request, the output steps therefore share one
+/// segment holding the latest substantive output.
 @available(iOS 27.0, macOS 27.0, visionOS 27.0, watchOS 27.0, *)
 struct EventTranslator: Sendable {
   let responseEntryID: String
@@ -38,12 +43,23 @@ struct EventTranslator: Sendable {
   private var model: String?
   private var settledUsage = Usage()
 
+  /// Whether the request is structured (see above).
+  private let structured: Bool
+  /// The segment shared by the output steps of a structured response.
+  private let structuredSegmentID = UUID().uuidString
+  /// The text of the shared segment as sent so far, and the latest
+  /// substantive output.
+  private var structuredText = ""
+  private var structuredAnswer = ""
+
   init(
     responseEntryID: String = UUID().uuidString,
-    toolCallsEntryID: String = UUID().uuidString
+    toolCallsEntryID: String = UUID().uuidString,
+    structured: Bool = false
   ) {
     self.responseEntryID = responseEntryID
     self.toolCallsEntryID = toolCallsEntryID
+    self.structured = structured
   }
 
   /// Where a step's pieces go; `step.delta` only carries an index, so this is
@@ -108,15 +124,32 @@ struct EventTranslator: Sendable {
         model = interaction["model"]?.stringValue ?? model
 
       case .stepStart(let index, let step):
-        let target = Self.target(for: step)
+        var target = Self.target(for: step)
+        if structured, case .text = target {
+          target = .text(segmentID: structuredSegmentID)
+          await replaceStructured(with: "", via: channel)
+        }
         targets[index] = target
         await open(step, target: target, via: channel)
 
       case .stepDelta(let index, let delta):
         await send(delta, to: targets[index], via: channel)
+        if structured, case .text? = targets[index], let text = delta["text"]?.stringValue,
+          delta["type"]?.stringValue == "text"
+        {
+          structuredText += text
+        }
 
       case .stepStop(let index):
         let target = targets.removeValue(forKey: index)
+        if structured, case .text? = target {
+          if Self.isSubstantive(structuredText) {
+            structuredAnswer = structuredText
+          } else if !structuredAnswer.isEmpty {
+            // An empty output after a real one doesn't replace it.
+            await replaceStructured(with: structuredAnswer, via: channel)
+          }
+        }
         if let completed { await record(completed, for: target, via: channel) }
 
       case .interactionCompleted(let interaction):
@@ -149,6 +182,28 @@ struct EventTranslator: Sendable {
   }
 
   // MARK: - Private
+
+  /// Whether a structured output is more than whitespace or an empty JSON
+  /// object or array.
+  static func isSubstantive(_ text: String) -> Bool {
+    let compact = text.filter { !$0.isWhitespace }
+    return !compact.isEmpty && compact != "{}" && compact != "[]"
+  }
+
+  /// Sets the shared segment of a structured response to `text`.
+  private mutating func replaceStructured(
+    with text: String,
+    via channel: ChannelSink
+  ) async {
+    guard structuredText != text else { return }
+    structuredText = text
+    await channel.send(
+      .response(
+        entryID: responseEntryID,
+        action: .replaceTextSegment(text, segmentID: structuredSegmentID, tokenCount: Self.deltaTokenCount)
+      )
+    )
+  }
 
   private static func target(for step: JSONValue) -> Target {
     let type = step["type"]?.stringValue ?? ""

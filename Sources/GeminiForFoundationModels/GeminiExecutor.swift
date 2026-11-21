@@ -82,7 +82,7 @@ public struct GeminiExecutor: LanguageModelExecutor {
         thoughtSummaries: configuration.thoughtSummaries,
         builtInTools: configuration.builtInTools
       )
-      var translator = EventTranslator()
+      var translator = EventTranslator(structured: built.isStructured)
       var body = built.body.objectValue ?? [:]
       var continuations = 0
       while true {

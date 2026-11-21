@@ -79,6 +79,20 @@ struct LiveTests {
   }
 
   @available(iOS 27.0, macOS 27.0, visionOS 27.0, watchOS 27.0, *)
+  @Test func `generates structured content after built-in tool use`() async throws {
+    // Structured requests leave the built-in tools out; the earlier turn's
+    // code execution steps are still replayed.
+    let session = LanguageModelSession(model: try model(builtInTools: [.codeExecution]))
+    _ = try await session.respond(to: "Use code execution to compute 2 to the power of 20.")
+    #expect(!GeminiToolActivity.activities(in: session.transcript).isEmpty)
+    for city in ["Lisbon", "Porto"] {
+      let response = try await session.respond(to: "Plan a short trip to \(city).", generating: Itinerary.self)
+      #expect(response.content.city.contains(city))
+      #expect(!response.content.days.isEmpty)
+    }
+  }
+
+  @available(iOS 27.0, macOS 27.0, visionOS 27.0, watchOS 27.0, *)
   @Test func `reasons with summaries across turns`() async throws {
     let session = LanguageModelSession(model: try model())
     let options = ContextOptions(reasoningLevel: .deep)

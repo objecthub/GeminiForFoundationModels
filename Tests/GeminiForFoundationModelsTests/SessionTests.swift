@@ -121,6 +121,33 @@ import Testing
   }
 
   @available(iOS 27.0, macOS 27.0, visionOS 27.0, watchOS 27.0, *)
+  static func outputs(_ texts: [String]) -> Data {
+    var events: [JSONValue] = [Event.created()]
+    for (index, text) in texts.enumerated() {
+      events += [
+        Event.start(index, ["type": "model_output"]),
+        Event.delta(index, ["type": "text", "text": .string(text)]),
+        Event.stop(index),
+      ]
+    }
+    events.append(Event.completed())
+    return sseBody(events)
+  }
+
+  @available(iOS 27.0, macOS 27.0, visionOS 27.0, watchOS 27.0, *)
+  @Test func `a structured response keeps the latest substantive output`() async throws {
+    let json = #"{"city":"Lisbon","days":[{"title":"Alfama","activities":["Castle"],"budget":80}]}"#
+    for texts in [["{}", "{}", json], [json, "{}"], ["{}", json, " "]] {
+      let session = LanguageModelSession(model: StubbedGeminiModel(fixture: Self.outputs(texts)))
+      let response = try await session.respond(to: "Plan a trip", generating: Itinerary.self)
+      #expect(response.content.city == "Lisbon")
+    }
+    // Text responses keep every output step.
+    let session = LanguageModelSession(model: StubbedGeminiModel(fixture: Self.outputs(["One. ", "Two."])))
+    #expect(try await session.respond(to: "Count").content == "One. Two.")
+  }
+
+  @available(iOS 27.0, macOS 27.0, visionOS 27.0, watchOS 27.0, *)
   @Test func `an incomplete structured response throws`() async throws {
     let transport = MockTransport(body: textTurn([#"{"city":"Lis"#], status: "incomplete"))
     let session = LanguageModelSession(model: StubbedGeminiModel(transport: transport))

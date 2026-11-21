@@ -90,9 +90,14 @@ enum RequestBuilder {
     body["input"] = .array(input)
 
     let functions = request.enabledToolDefinitions.map(functionDefinition)
+    // Built-in tools are left out of structured requests: combined with a
+    // schema, a model can keep calling them without ever producing the
+    // structured output (observed with code execution). Steps of earlier
+    // built-in calls replay fine without the tool being declared.
+    let builtIns = request.schema == nil ? builtInTools : []
     let tools =
       functions
-      + builtInTools.sorted { $0.rawValue < $1.rawValue }.map { ["type": .string($0.rawValue)] }
+      + builtIns.sorted { $0.rawValue < $1.rawValue }.map { ["type": .string($0.rawValue)] }
     if !tools.isEmpty { body["tools"] = .array(tools) }
 
     let config = generationConfig(

@@ -126,6 +126,17 @@ import Testing
   }
 
   @available(iOS 27.0, macOS 27.0, visionOS 27.0, watchOS 27.0, *)
+  @Test func `structured requests leave out built-in tools`() throws {
+    let tool = Transcript.ToolDefinition(tool: ConvertTool())
+    let body = try RequestBuilder.build(
+      from: request([prompt("x")], tools: [tool], schema: Itinerary.generationSchema),
+      model: .gemini3_8Flash,
+      builtInTools: [.codeExecution, .googleSearch]
+    ).body
+    #expect(body["tools"]?.arrayValue?.compactMap { $0["type"]?.stringValue } == ["function"])
+  }
+
+  @available(iOS 27.0, macOS 27.0, visionOS 27.0, watchOS 27.0, *)
   @Test func `nested schemas keep their definitions and order`() throws {
     let schema = Itinerary.generationSchema
     let json = RequestBuilder.jsonSchema(from: schema)

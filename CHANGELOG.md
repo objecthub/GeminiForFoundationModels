@@ -14,4 +14,6 @@ First release.
   - `GeminiModel.available(auth:)` lists the API's catalog.
 - Built-in tools: Google Search, URL context, code execution. `GeminiToolActivity` reads their calls and results back out of a transcript.
 - Error mapping to `LanguageModelError`, `GeminiError`, and `GeminiAPIError`.
+- Structured requests leave out built-in tools; with a schema, a model can keep calling them without ever answering.
+- Streams that send no events for three times the request timeout fail with a timeout instead of hanging.
 - The package builds for macOS 14 / iOS 17; its API is available on the OS 27 releases.

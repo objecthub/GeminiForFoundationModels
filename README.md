@@ -114,6 +114,7 @@ try GeminiLanguageModel(
 
 - **A fixed thinking level** must be one the model accepts. Otherwise the initializer throws `GeminiError.unsupportedThinkingLevel`.
 - **Built-in tools** run on Google's side. Read their calls and results back with `GeminiToolActivity.activities(in: session.transcript)`. Each activity gives its search queries, URLs, or code and output.
+- **Built-in tools and guided generation don't mix.** Requests with a schema leave the built-in tools out. Combined with a schema, a model can keep calling a built-in tool without ever producing the structured output. Earlier built-in tool steps in the conversation are still sent.
 - **Proxying.** `.proxied(headers:)` with a custom `baseURL` routes requests through your own relay, which adds the API key. Credentials are only sent to the configured origin; a redirect elsewhere fails the request.
 
 ## Errors
