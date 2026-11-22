@@ -22,6 +22,8 @@ public struct GeminiLanguageModel: Sendable {
   public let thinkingLevel: GeminiModel.ThinkingLevel?
   public let thoughtSummaries: Bool
   public let builtInTools: Set<GeminiBuiltInTool>
+  public let replaysEarlierThoughts: Bool
+  public let retry: GeminiRetryPolicy
   public let baseURL: URL
   public let timeout: TimeInterval
   let auth: GeminiAuth
@@ -40,6 +42,13 @@ public struct GeminiLanguageModel: Sendable {
   ///   - builtInTools: Tools that run on Google's infrastructure (search,
   ///     URL context, code execution). Distinct from the framework's
   ///     `tools:`, which the framework invokes client-side.
+  ///   - replaysEarlierThoughts: Whether requests also send the thoughts of
+  ///     completed turns. The API only needs the current turn's thoughts,
+  ///     and it bills earlier ones as input tokens, so by default they are
+  ///     left out.
+  ///   - retry: How often a request is sent again after a temporary failure
+  ///     (rate limits, overloaded servers, lost connections), before any of
+  ///     its response reached the session.
   ///   - baseURL: API endpoint. Credentials are only ever sent to its scheme,
   ///     host, and port: a redirect elsewhere fails the request.
   ///   - timeout: Request timeout in seconds.
@@ -51,6 +60,8 @@ public struct GeminiLanguageModel: Sendable {
     thinkingLevel: GeminiModel.ThinkingLevel? = nil,
     thoughtSummaries: Bool = true,
     builtInTools: Set<GeminiBuiltInTool> = [],
+    replaysEarlierThoughts: Bool = false,
+    retry: GeminiRetryPolicy = .default,
     baseURL: URL = GeminiLanguageModel.defaultBaseURL,
     timeout: TimeInterval = 120
   ) throws {
@@ -62,6 +73,8 @@ public struct GeminiLanguageModel: Sendable {
     self.thinkingLevel = thinkingLevel
     self.thoughtSummaries = thoughtSummaries
     self.builtInTools = builtInTools
+    self.replaysEarlierThoughts = replaysEarlierThoughts
+    self.retry = retry
     self.baseURL = baseURL
     self.timeout = timeout
   }
@@ -90,6 +103,8 @@ extension GeminiLanguageModel: LanguageModel {
       thinkingLevel: thinkingLevel,
       thoughtSummaries: thoughtSummaries,
       builtInTools: builtInTools,
+      replaysEarlierThoughts: replaysEarlierThoughts,
+      retry: retry,
       baseURL: baseURL,
       timeout: timeout
     )

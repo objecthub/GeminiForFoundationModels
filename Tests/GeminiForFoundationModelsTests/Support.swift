@@ -157,6 +157,7 @@ final class MockTransport: HTTPTransport {
   private struct Canned {
     let status: Int
     let body: Data
+    var headers: [String: String] = [:]
   }
 
   private let responses: [Canned]
@@ -171,8 +172,21 @@ final class MockTransport: HTTPTransport {
     self.responses = responses.map { Canned(status: $0.status, body: $0.body) }
   }
 
+  init(replies: [(status: Int, body: Data, headers: [String: String])]) {
+    precondition(!replies.isEmpty, "MockTransport needs at least one response")
+    self.responses = replies.map { Canned(status: $0.status, body: $0.body, headers: $0.headers) }
+  }
+
   var lastRequest: URLRequest? { recorded.withLock { $0.last } }
   var requests: [URLRequest] { recorded.withLock { $0 } }
+
+  /// The waits requested before retries; nothing actually waits.
+  private let slept = Mutex<[TimeInterval]>([])
+  var sleeps: [TimeInterval] { slept.withLock { $0 } }
+
+  func sleep(_ seconds: TimeInterval) async throws {
+    slept.withLock { $0.append(seconds) }
+  }
 
   func data(for request: URLRequest) async throws -> (Data, URLResponse) {
     let canned = next(recording: request)
@@ -196,7 +210,7 @@ final class MockTransport: HTTPTransport {
   }
 
   private func response(_ request: URLRequest, _ canned: Canned) -> URLResponse {
-    HTTPURLResponse(url: request.url!, statusCode: canned.status, httpVersion: "HTTP/1.1", headerFields: nil)!
+    HTTPURLResponse(url: request.url!, statusCode: canned.status, httpVersion: "HTTP/1.1", headerFields: canned.headers)!
   }
 }
 
@@ -212,19 +226,25 @@ struct StubbedGeminiModel: LanguageModel {
   let model: GeminiModel
   let thinkingLevel: GeminiModel.ThinkingLevel?
   let builtInTools: Set<GeminiBuiltInTool>
+  let replaysEarlierThoughts: Bool
+  let retry: GeminiRetryPolicy
 
   init(
     transport: MockTransport,
     auth: GeminiAuth = .apiKey("test-key"),
     model: GeminiModel = .gemini3_8Flash,
     thinkingLevel: GeminiModel.ThinkingLevel? = nil,
-    builtInTools: Set<GeminiBuiltInTool> = []
+    builtInTools: Set<GeminiBuiltInTool> = [],
+    replaysEarlierThoughts: Bool = false,
+    retry: GeminiRetryPolicy = .default
   ) {
     self.transport = transport
     self.auth = auth
     self.model = model
     self.thinkingLevel = thinkingLevel
     self.builtInTools = builtInTools
+    self.replaysEarlierThoughts = replaysEarlierThoughts
+    self.retry = retry
   }
 
   init(fixture: Data) {
@@ -243,6 +263,8 @@ struct StubbedGeminiModel: LanguageModel {
         auth: auth,
         thinkingLevel: thinkingLevel,
         builtInTools: builtInTools,
+        replaysEarlierThoughts: replaysEarlierThoughts,
+        retry: retry,
         baseURL: URL(string: "https://stub.invalid")!,
         timeout: 5
       )
@@ -273,7 +295,13 @@ struct StubbedExecutor: LanguageModelExecutor {
 
   init(configuration: Configuration) throws {
     self.configuration = configuration
-    self.inner = GeminiExecutor(configuration: configuration.configuration, transport: configuration.transport)
+    let transport = configuration.transport
+    self.inner = GeminiExecutor(
+      configuration: configuration.configuration,
+      transport: transport,
+      sleep: { try await transport.sleep($0) },
+      jitter: { 1 }
+    )
   }
 
   func respond(

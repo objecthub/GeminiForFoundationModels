@@ -55,11 +55,33 @@ struct EventTranslator: Sendable {
   init(
     responseEntryID: String = UUID().uuidString,
     toolCallsEntryID: String = UUID().uuidString,
-    structured: Bool = false
+    structured: Bool = false,
+    attempt: Int = 1
   ) {
     self.responseEntryID = responseEntryID
     self.toolCallsEntryID = toolCallsEntryID
     self.structured = structured
+    self.attempt = attempt
+  }
+
+  /// Whether the request is structured.
+  var structuredRequest: Bool { structured }
+
+  /// Which attempt of the request this response is (1 unless it was sent
+  /// again); recorded on the response entry when it is more than 1, since
+  /// an abandoned attempt may have been billed.
+  private let attempt: Int
+
+  /// Response-entry metadata key holding the number of attempts a response
+  /// took, when it took more than one.
+  static let attemptsMetadataKey = "gemini.attempts"
+
+  /// The response entry's metadata: the record of its steps and, after a
+  /// retry, the number of attempts.
+  private var responseMetadata: [String: any ConvertibleToGeneratedContent] {
+    var metadata = StepRecord.metadata(turn: turn, stored: responseStored, model: model)
+    if attempt > 1 { metadata[Self.attemptsMetadataKey] = attempt }
+    return metadata
   }
 
   /// Where a step's pieces go; `step.delta` only carries an index, so this is
@@ -157,6 +179,12 @@ struct EventTranslator: Sendable {
         continuationToken = interaction["continuation_token"]?.stringValue
         errors = interaction["errors"]?.arrayValue ?? []
         if let model = interaction["model"]?.stringValue { self.model = model }
+        // A failed interaction is reported as an error, which may still be
+        // retried; usage would count as something that reached the session.
+        guard status != "failed" else { break }
+        if attempt > 1 {
+          await channel.send(.response(entryID: responseEntryID, action: .updateMetadata(responseMetadata)))
+        }
         let usage = settledUsage + Usage(interaction["usage"] ?? [:])
         settledUsage = usage
         await channel.send(
@@ -326,9 +354,7 @@ struct EventTranslator: Sendable {
       await channel.send(
         .response(
           entryID: responseEntryID,
-          action: .updateMetadata(
-            StepRecord.metadata(turn: turn, stored: responseStored, model: model)
-          )
+          action: .updateMetadata(responseMetadata)
         )
       )
       // The placeholder goes in once its step is on the record, so the

@@ -42,7 +42,7 @@ let plan = try await session.respond(to: "Plan two days in Lisbon.", generating:
 ## Installation
 
 ```swift
-.package(url: "https://github.com/objecthub/GeminiForFoundationModels.git", from: "0.1.1")
+.package(url: "https://github.com/objecthub/GeminiForFoundationModels.git", from: "0.1.2")
 ```
 
 Then add the `GeminiForFoundationModels` product to your target.
@@ -59,6 +59,8 @@ The bridge talks to the **Interactions API** (`POST /v1beta/interactions` on `ge
 - the response entry holds the output and built-in tool steps.
 
 The steps are replayed from there. Persist a session with the transcript's `Codable` form and nothing is lost.
+
+**Thoughts of completed turns are left out.** The API needs the thoughts of the current turn (a tool loop) back, but earlier ones are optional, and it bills them as input tokens: in a measured two-turn conversation, 405 input tokens with the first turn's thoughts against 53 without. `replaysEarlierThoughts: true` sends them anyway.
 
 **Mapping of framework features:**
 
@@ -107,6 +109,8 @@ try GeminiLanguageModel(
   thinkingLevel: .xhigh,       // fixed level; overrides the reasoning hint
   thoughtSummaries: true,      // reasoning entries with thought summaries
   builtInTools: [.googleSearch, .urlContext, .codeExecution],
+  replaysEarlierThoughts: false, // also send the thoughts of completed turns
+  retry: .default,             // or .disabled, or GeminiRetryPolicy(maxRetries:maxDelay:)
   baseURL: GeminiLanguageModel.defaultBaseURL,
   timeout: 120
 )
@@ -116,6 +120,12 @@ try GeminiLanguageModel(
 - **Built-in tools** run on Google's side. Read their calls and results back with `GeminiToolActivity.activities(in: session.transcript)`. Each activity gives its search queries, URLs, or code and output.
 - **Built-in tools and guided generation don't mix.** Requests with a schema leave the built-in tools out. Combined with a schema, a model can keep calling a built-in tool without ever producing the structured output. Earlier built-in tool steps in the conversation are still sent.
 - **Proxying.** `.proxied(headers:)` with a custom `baseURL` routes requests through your own relay, which adds the API key. Credentials are only sent to the configured origin; a redirect elsewhere fails the request.
+
+## Retries
+
+A request is sent again after a temporary failure, while nothing of its response has reached the session and never after cancellation, per the `GeminiRetryPolicy` (by default twice): rate limits and exhausted quotas (`RESOURCE_EXHAUSTED`), overloaded or failing servers (408, 500, 503, 504), failed interactions, and lost or stalled connections. The wait is the one the server asks for (`RetryInfo`), or else an exponential backoff with jitter (about 0.5 s, 1 s, 2 s). If the server asks for longer than `maxDelay` (20 s), the request fails right away with `LanguageModelError.rateLimited` and the reset time, so the app decides whether to wait. Depleted prepaid credits (402), invalid credentials, invalid requests, and blocked content fail immediately.
+
+A response that took more than one attempt records the number under the metadata key `gemini.attempts` of its response entry: an abandoned attempt may have been billed.
 
 ## Errors
 

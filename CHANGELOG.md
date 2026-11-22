@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 (2026-11-22)
+
+- Thoughts of completed turns are no longer sent back. The API only needs the current turn's thoughts, and it bills earlier ones as input tokens (405 against 53 input tokens in a measured two-turn conversation). `replaysEarlierThoughts: true` sends them anyway.
+- Retries: a request is sent again after a temporary failure (rate limits, exhausted quotas, overloaded or failing servers, failed interactions, lost or stalled connections) while nothing of its response has reached the session. `GeminiRetryPolicy` (default: two retries, at most 20 s of waiting each) sets how often; the server's `RetryInfo` decides how long, or else an exponential backoff with jitter. A longer requested wait fails right away with the reset time.
+- Responses that took more than one attempt record the number under `gemini.attempts`.
+
 ## 0.1.1 (2026-11-21)
 
 - All requests with the same timeout share one `URLSession`. Before, every executor created its own session, and so did every model list call; the sessions were never invalidated, and each kept its own idle connections alive, which expire with log messages like `nw_read_request_report [C13] Receive failed with error "Operation timed out"`.

@@ -90,10 +90,11 @@ import Testing
 
     let second = try body(of: transport.requests.last)
     #expect(second["system_instruction"] == "Be brief.")
-    #expect(stepTypes(second) == ["user_input", "thought", "model_output", "user_input"])
+    // The completed turn's thought isn't sent: the API bills it as input.
+    #expect(stepTypes(second) == ["user_input", "model_output", "user_input"])
     let input = try #require(second["input"]?.arrayValue)
-    #expect(input[1]["signature"] == "sig-a")
-    #expect(input[2]["content"]?[0]?["text"] == "First.")
+    #expect(stepTypes(second).count == input.count)
+    #expect(input[1]["content"]?[0]?["text"] == "First.")
     #expect(second["store"] == false)
     #expect(second["stream"] == true)
   }

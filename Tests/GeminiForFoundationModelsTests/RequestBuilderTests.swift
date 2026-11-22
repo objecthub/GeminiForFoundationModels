@@ -185,11 +185,17 @@ import Testing
     )
     // The entries are out of order; the positions put them back.
     let body = try RequestBuilder.build(
-      from: request([prompt("x"), .response(response), .reasoning(reasoning), prompt("y")]),
+      from: request([prompt("x"), .response(response), .reasoning(reasoning)]),
       model: .gemini3_8Flash
     ).body
     #expect(body["input"]?[1] == thought)
     #expect(body["input"]?[2] == output)
+    // Once a new prompt follows, the turn's thought is only sent on request.
+    let later = request([prompt("x"), .response(response), .reasoning(reasoning), prompt("y")])
+    #expect(stepTypes(try RequestBuilder.build(from: later, model: .gemini3_8Flash).body)
+      == ["user_input", "model_output", "user_input"])
+    #expect(stepTypes(try RequestBuilder.build(from: later, model: .gemini3_8Flash, earlierThoughts: true).body)
+      == ["user_input", "thought", "model_output", "user_input"])
   }
 
   @available(iOS 27.0, macOS 27.0, visionOS 27.0, watchOS 27.0, *)

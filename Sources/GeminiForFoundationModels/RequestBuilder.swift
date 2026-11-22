@@ -25,7 +25,8 @@ enum RequestBuilder {
     model: GeminiModel,
     thinkingLevel fixedLevel: GeminiModel.ThinkingLevel? = nil,
     thoughtSummaries: Bool = true,
-    builtInTools: Set<GeminiBuiltInTool> = []
+    builtInTools: Set<GeminiBuiltInTool> = [],
+    earlierThoughts: Bool = false
   ) throws -> Built {
     var system: String?
 
@@ -87,7 +88,7 @@ enum RequestBuilder {
 
     var body: JSONObject = ["model": .string(model.id)]
     if let system { body["system_instruction"] = .string(system) }
-    body["input"] = .array(input)
+    body["input"] = .array(earlierThoughts ? input : currentTurnThoughts(of: input))
 
     let functions = request.enabledToolDefinitions.map(functionDefinition)
     // Built-in tools are left out of structured requests: combined with a
@@ -128,6 +129,23 @@ enum RequestBuilder {
     }
     body["store"] = false
     return Built(body: .object(body), isStructured: request.schema != nil)
+  }
+
+  /// `input` without the `thought` steps before the latest user input.
+  ///
+  /// The API needs the thoughts of the current turn (a tool loop) back with
+  /// their signatures. Thoughts of completed turns are optional, but the API
+  /// bills them as input tokens: in a measured two-turn conversation, 405
+  /// input tokens with the first turn's thoughts against 53 without.
+  static func currentTurnThoughts(of input: [JSONValue]) -> [JSONValue] {
+    guard let latestPrompt = input.lastIndex(where: { $0["type"]?.stringValue == "user_input" }) else {
+      return input
+    }
+    // `filter`, not `compactMap`: `JSONValue` is nil-literal convertible, so
+    // a `nil` in a `compactMap` closure would become a JSON `null`.
+    return input.enumerated()
+      .filter { index, step in !(index < latestPrompt && step["type"]?.stringValue == "thought") }
+      .map(\.element)
   }
 
   // MARK: - Generation config
